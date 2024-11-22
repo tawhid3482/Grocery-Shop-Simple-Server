@@ -27,22 +27,55 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
+    // all collection
+    const productCollection = client.db("Grocery-Shop").collection("Products");
+    const reviewsCollection = client.db("Grocery-Shop").collection("reviews");
+    const cartCollection = client.db("Grocery-Shop").collection("carts");
+    const favoriteCollection = client
+      .db("Grocery-Shop")
+      .collection("favorites");
 
+    // products
+    app.get("/products", async (req, res) => {
+      const result = await productCollection.find().toArray();
+      res.send(result);
+    });
 
-    // products all collection
-    const productCollection = client.db("Grocery-Shop").collection("Products")
-    app.get('/products', async(req,res)=>{
-        const result = await await productCollection.find().toArray()
-        res.send(result)
-    })
+    // reviews
+    app.get("/reviews", async (req, res) => {
+      const result = await reviewsCollection.find().toArray();
+      res.send(result);
+    });
 
-    // reviews all collection
+    // cart
 
-    const reviewsCollection = client.db("Grocery-Shop").collection("reviews")
-    app.get('/reviews', async(req,res)=>{
-        const result = await await reviewsCollection.find().toArray()
-        res.send(result)
-    })
+    app.post("/carts", async (req, res) => {
+      const cartItem = req.body;
+      const result = await cartCollection.insertOne(cartItem);
+      res.send(result);
+    });
+
+    app.get("/carts", async (req, res) => {
+      const email = req.query.email;
+      const query = {email:email}
+      const result = await cartCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    // favorite
+
+    app.post("/favorites", async (req, res) => {
+      const favoriteItem = req.body;
+      const result = await favoriteCollection.insertOne(favoriteItem);
+      res.send(result);
+    });
+
+    app.get("/favorites", async (req, res) => {
+      const email = req.query.email;
+      const query = {email:email}
+      const result = await favoriteCollection.find(query).toArray();
+      res.send(result);
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
@@ -55,7 +88,6 @@ async function run() {
   }
 }
 run().catch(console.dir);
-
 
 // server running
 app.get("/", (req, res) => {
