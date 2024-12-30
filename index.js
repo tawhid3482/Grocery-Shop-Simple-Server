@@ -36,6 +36,7 @@ async function run() {
       .db("Grocery-Shop")
       .collection("favorites");
     const userCollection = client.db("Grocery-Shop").collection("users");
+    const addressCollection = client.db("Grocery-Shop").collection("address");
 
     // jwt api
     app.post("/jwt", async (req, res) => {
@@ -159,12 +160,56 @@ async function run() {
       const result = await productCollection.find().toArray();
       res.send(result);
     });
+    app.get("/products/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await productCollection.findOne(query);
+      res.send(result);
+    });
 
-    app.post('/products',verifyToken,verifyAdmin, async(req,res)=>{
+    app.post("/products", verifyToken, verifyAdmin, async (req, res) => {
       const product = req.body;
-      const result = await productCollection.insertOne(product)
-      res.send(result)
-    })
+      const result = await productCollection.insertOne(product);
+      res.send(result);
+    });
+    app.delete("/products/:id", verifyToken, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await productCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    app.patch("/products/:id", verifyToken, verifyAdmin, async (req, res) => {
+      const item = req.body;
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          name: item.name,
+          oldPrice: item.oldPrice,
+          newPrice: item.newPrice,
+          category: item.category,
+          rating: item.rating,
+          stock: item.stock,
+          description: item.description,
+          featured: item.featured,
+          offer: item.offer,
+          stock_quantity: item.stock_quantity,
+          brand: item.brand,
+          unit_of_measure: item.unit_of_measure,
+          supplier: {
+            name: item.supplier?.name || "",
+            contact_info: {
+              phone: item.supplier?.contact_info?.phone || "",
+              email: item.supplier?.contact_info?.email || "",
+            },
+          },
+          img: item.img,
+        },
+      };
+      const result = await productCollection.updateOne(query, updatedDoc);
+      res.send(result);
+    });
 
     // reviews
     app.get("/reviews", async (req, res) => {
@@ -194,6 +239,20 @@ async function run() {
       res.send(result);
     });
 
+    app.patch("/carts/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const item = req.body;
+      const updatedDoc = {
+        $set: {
+          count: item.count,
+          price: item.price,
+        },
+      };
+      const result = await cartCollection.updateOne(query, updatedDoc);
+      res.send(result);
+    });
+
     // favorite
     app.post("/favorites", async (req, res) => {
       const favoriteItem = req.body;
@@ -212,6 +271,19 @@ async function run() {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await favoriteCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    // address
+    app.post("/address", async (req, res) => {
+      const data = req.body;
+      const result = await addressCollection.insertOne(data);
+      res.send(result);
+    });
+    app.get("/address", async (req, res) => {
+      const email = req.body;
+      const query = { email: email };
+      const result = await addressCollection.find(query);
       res.send(result);
     });
 
