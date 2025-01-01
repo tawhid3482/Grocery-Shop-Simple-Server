@@ -37,6 +37,9 @@ async function run() {
       .collection("favorites");
     const userCollection = client.db("Grocery-Shop").collection("users");
     const addressCollection = client.db("Grocery-Shop").collection("address");
+    const couponCollection = client.db("Grocery-Shop").collection("coupon");
+    const checkOutCollection = client.db("Grocery-Shop").collection("checkout");
+    const orderCollection = client.db("Grocery-Shop").collection("order");
 
     // jwt api
     app.post("/jwt", async (req, res) => {
@@ -239,6 +242,15 @@ async function run() {
       res.send(result);
     });
 
+    app.delete("/carts", async (req, res) => {
+      const email = req.query.email;
+      // console.log(`Deleting carts for email: ${email}`);
+      const query = { email: email };
+      const result = await cartCollection.deleteMany(query);
+      res.send(result);
+    });
+    
+
     app.patch("/carts/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -281,9 +293,80 @@ async function run() {
       res.send(result);
     });
     app.get("/address", async (req, res) => {
-      const email = req.body;
+      const email = req.query.email;
       const query = { email: email };
-      const result = await addressCollection.find(query);
+      const result = await addressCollection.find(query).toArray();
+      res.send(result);
+    });
+    // coupon
+    app.post("/coupon", verifyToken, verifyAdmin, async (req, res) => {
+      const data = req.body;
+      const result = await couponCollection.insertOne(data);
+      res.send(result);
+    });
+    app.get("/coupon", async (req, res) => {
+      const result = await couponCollection.find().toArray();
+      res.send(result);
+    });
+
+    // checkout
+    app.post("/checkout", async (req, res) => {
+      const checkoutItem = req.body;
+      const result = await checkOutCollection.insertOne(checkoutItem);
+      res.send(result);
+    });
+
+    app.get("/checkout/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const result = await checkOutCollection.findOne(query);
+      res.send(result); 
+    });
+    
+    app.get("/checkout", async (req, res) => {
+      // const email = req.query.email;
+      // const query = { email: email };
+      const result = await checkOutCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.delete("/checkout/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await checkOutCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    app.patch("/checkout/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const item = req.body;
+      const updatedDoc = {
+        $set: {
+          cart: item.cart,
+          subtotal: item.subtotal,
+          discount: item.discount,
+          discountPrice: item.discountPrice,
+          total: item.total,
+        },
+      };
+      const result = await checkOutCollection.updateOne(query, updatedDoc);
+      res.send(result);
+    });
+    
+
+
+    // order
+
+    app.post("/order", async (req, res) => {
+      const orderData = req.body;
+      const result = await orderCollection.insertOne(orderData);
+      res.send(result);
+    });
+    app.get("/order", async (req, res) => {
+      const email = req.query.email;
+      const query = { email: email };
+      const result = await orderCollection.find(query).toArray();
       res.send(result);
     });
 
