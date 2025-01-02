@@ -3,6 +3,7 @@ const app = express();
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
+const stripe= require("stripe")(process.env.STRIPE_SECRET_KEY);
 const port = process.env.PORT || 5000;
 
 // middleWare
@@ -40,6 +41,7 @@ async function run() {
     const couponCollection = client.db("Grocery-Shop").collection("coupon");
     const checkOutCollection = client.db("Grocery-Shop").collection("checkout");
     const orderCollection = client.db("Grocery-Shop").collection("order");
+    const paymentCollection = client.db("Grocery-Shop").collection("payment");
 
     // jwt api
     app.post("/jwt", async (req, res) => {
@@ -249,7 +251,6 @@ async function run() {
       const result = await cartCollection.deleteMany(query);
       res.send(result);
     });
-    
 
     app.patch("/carts/:id", async (req, res) => {
       const id = req.params.id;
@@ -320,9 +321,9 @@ async function run() {
       const email = req.params.email;
       const query = { email: email };
       const result = await checkOutCollection.findOne(query);
-      res.send(result); 
+      res.send(result);
     });
-    
+
     app.get("/checkout", async (req, res) => {
       // const email = req.query.email;
       // const query = { email: email };
@@ -353,11 +354,8 @@ async function run() {
       const result = await checkOutCollection.updateOne(query, updatedDoc);
       res.send(result);
     });
-    
-
 
     // order
-
     app.post("/order", async (req, res) => {
       const orderData = req.body;
       const result = await orderCollection.insertOne(orderData);
@@ -367,6 +365,49 @@ async function run() {
       const email = req.query.email;
       const query = { email: email };
       const result = await orderCollection.find(query).toArray();
+      res.send(result);
+    });
+    app.get("/order/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const result = await orderCollection.findOne(query);
+      res.send(result);
+    });
+    app.patch("/order/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const item = req.body;
+      const updatedDoc = {
+        $set: {
+          cart: item.cart,
+          subtotal: item.subtotal,
+          discount: item.discount,
+          discountPrice: item.discountPrice,
+          total: item.total,
+        },
+      };
+      const result = await checkOutCollection.updateOne(query, updatedDoc);
+      res.send(result);
+    });
+
+    // payment
+    app.post("/create-payment-intent", async (req, res) => {
+      const {price} = req.body;
+      const amount = parseInt(price * 100);
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
+    });
+
+    app.get("/payment", async (req, res) => {
+      const email = req.query.email;
+      const query = { email: email };
+      const result = await paymentCollection.find(query).toArray();
       res.send(result);
     });
 
