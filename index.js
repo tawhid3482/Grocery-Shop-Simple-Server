@@ -3,7 +3,7 @@ const app = express();
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
-const stripe= require("stripe")(process.env.STRIPE_SECRET_KEY);
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const port = process.env.PORT || 5000;
 
 // middleWare
@@ -344,7 +344,7 @@ async function run() {
       const item = req.body;
       const updatedDoc = {
         $set: {
-          cart: item.cart,
+          // cart: item.cart,
           subtotal: item.subtotal,
           discount: item.discount,
           discountPrice: item.discountPrice,
@@ -373,10 +373,25 @@ async function run() {
       const result = await orderCollection.findOne(query);
       res.send(result);
     });
+
+    app.patch("/order/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      console.log(query);
+      const item = req.body;
+      console.log(item);
+      const updatedDoc = {
+        $set: {
+          isOrderConfirmed: item.isOrderConfirmed,
+        },
+      };
+      const result = await orderCollection.updateOne(query, updatedDoc);
+      res.send(result);
+    });
+
     app.patch("/order/:email", async (req, res) => {
       const email = req.params.email;
       const query = { email: email };
-      const item = req.body;
       const updatedDoc = {
         $set: {
           cart: item.cart,
@@ -384,15 +399,24 @@ async function run() {
           discount: item.discount,
           discountPrice: item.discountPrice,
           total: item.total,
+          isOrderConfirmed: item.isOrderConfirmed,
         },
       };
       const result = await checkOutCollection.updateOne(query, updatedDoc);
       res.send(result);
     });
 
+   
+
     // payment
+    app.post("/payment", async (req, res) => {
+      const paymentData = req.body;
+      const result = await paymentCollection.insertOne(paymentData);
+      res.send(result);
+    });
+
     app.post("/create-payment-intent", async (req, res) => {
-      const {price} = req.body;
+      const { price } = req.body;
       const amount = parseInt(price * 100);
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amount,
