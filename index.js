@@ -221,6 +221,11 @@ async function run() {
       const result = await reviewsCollection.find().toArray();
       res.send(result);
     });
+    app.post("/reviews", async (req, res) => {
+      const review = req.body;
+      const result = await reviewsCollection.insertOne(review);
+      res.send(result);
+    });
 
     // cart
 
@@ -299,6 +304,7 @@ async function run() {
       const result = await addressCollection.find(query).toArray();
       res.send(result);
     });
+
     // coupon
     app.post("/coupon", verifyToken, verifyAdmin, async (req, res) => {
       const data = req.body;
@@ -307,6 +313,13 @@ async function run() {
     });
     app.get("/coupon", async (req, res) => {
       const result = await couponCollection.find().toArray();
+      res.send(result);
+    });
+    app.delete("coupon/:id", async (req, res) => {
+      const id = req.params.id;
+      console.log(id);
+      const query = { _id: new ObjectId(id) };
+      const result = await couponCollection.deleteOne(query);
       res.send(result);
     });
 
@@ -377,12 +390,12 @@ async function run() {
     app.patch("/order/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
-      console.log(query);
       const item = req.body;
-      console.log(item);
       const updatedDoc = {
         $set: {
           isOrderConfirmed: item.isOrderConfirmed,
+          paymentMethod: item.paymentMethod,
+          isDelivered: item.isDelivered,
         },
       };
       const result = await orderCollection.updateOne(query, updatedDoc);
@@ -406,7 +419,12 @@ async function run() {
       res.send(result);
     });
 
-   
+    app.delete("/order/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await orderCollection.deleteOne(query);
+      res.send(result);
+    });
 
     // payment
     app.post("/payment", async (req, res) => {
