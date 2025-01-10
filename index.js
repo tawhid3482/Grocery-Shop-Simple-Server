@@ -1,6 +1,7 @@
 const express = require("express");
 const app = express();
 const cors = require("cors");
+const SSLCommerzPayment = require("sslcommerz-lts");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
@@ -23,6 +24,10 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+
+const store_id = process.env.SSLCOMMERZ_STORE_ID;
+const store_passwd = process.env.SSLCOMMERZ_STORE_PASSWORD;
+const is_live = false;
 
 async function run() {
   try {
@@ -369,17 +374,122 @@ async function run() {
     });
 
     // order
+    // app.post("/order", async (req, res) => {
+    //   const orderData = req.body;
+    //   console.log(orderData)
+    //   const result = await orderCollection.insertOne(orderData);
+    //   res.send(result);
+    // });
+
     app.post("/order", async (req, res) => {
-      const orderData = req.body;
-      const result = await orderCollection.insertOne(orderData);
-      res.send(result);
+      try {
+        const orderData = req.body;
+        const totalAmount = parseFloat(orderData.total[0]);
+        const tran_Id = new ObjectId().toString();
+
+        // Check for SSL-Commerz payment method
+        if (orderData.bank_name === "SSL-Commerz") {
+          const primaryAddress = orderData.address[0]?.data || {};
+
+          const data = {
+            total_amount: totalAmount.toFixed(2),
+            currency: "BDT",
+            tran_id: tran_Id, // Unique transaction ID
+            success_url: `http://localhost:5000/payment/success/${tran_Id}`,
+            fail_url: "http://localhost:3030/fail",
+            cancel_url: "http://localhost:3030/cancel",
+            ipn_url: "http://localhost:3030/ipn",
+            shipping_method: "Courier",
+            product_name: "grocery",
+            product_category: "grocery",
+            product_profile: "grocery-shop",
+            cus_email: orderData.email,
+            cus_add1: primaryAddress.district || "Dhaka",
+            cus_add2: primaryAddress.division || "Dhaka",
+            cus_city: primaryAddress.town || "Dhaka",
+            cus_state: primaryAddress.town || "Dhaka",
+            cus_postcode: primaryAddress.postCode || "1000",
+            cus_country: "Bangladesh",
+            cus_phone: primaryAddress.phone || "01711111111",
+            cus_fax: "none",
+            ship_name: orderData.name,
+            ship_add1: primaryAddress.district || "Dhaka",
+            ship_add2: primaryAddress.division || "Dhaka",
+            ship_city: primaryAddress.town || "Dhaka",
+            ship_state: primaryAddress.town || "Dhaka",
+            ship_postcode: primaryAddress.postCode || "1000",
+            ship_country: "Bangladesh",
+          };
+
+          const sslcz = new SSLCommerzPayment(store_id, store_passwd, is_live);
+          sslcz
+            .init(data)
+            .then((apiResponse) => {
+              if (apiResponse && apiResponse.GatewayPageURL) {
+                let GatewayPageURL = apiResponse.GatewayPageURL;
+                res.send({ url: GatewayPageURL });
+
+                const finalOrder = {
+                  ...orderData,
+                  isOrderConfirmed: false,
+                  isDelivered: false,
+                  transactionId: tran_Id,
+                };
+                const result = orderCollection.insertOne(finalOrder);
+              } else {
+                res.status(500).send({ error: "Failed to get GatewayPageURL" });
+              }
+            })
+            .catch((error) => {
+              res.status(500).send({ error: "Error initializing SSLCommerz" });
+            });
+
+          app.post("/payment/success/:tranId", async (req, res) => {
+            // console.log(req.params.tranId)
+            const result = await orderCollection.updateOne(
+              { transactionId: req.params.tranId },
+              { $set: { isOrderConfirmed: true } }
+            );
+
+            const paymentData = {
+              email: orderData.email,
+              price: totalAmount,
+              transactionId: req.params.tranId,
+              orderId: orderData._id,
+              date: new Date(),
+              paymentMethod: "SSL-Commerz",
+              status: "success",
+            };
+            const payment = await paymentCollection.insertOne(paymentData);
+            if (result.modifiedCount > 0) {
+              res.redirect(`http://localhost:5173/dashboard/paymentHistory`);
+            }
+          });
+        } else {
+          // Insert order data into the database
+          const result = await orderCollection.insertOne(orderData);
+          res.send(result);
+        }
+      } catch (error) {
+        console.error("Error processing the order:", error);
+        res
+          .status(500)
+          .send({ error: "Something went wrong while processing the order" });
+      }
     });
+
     app.get("/order", async (req, res) => {
       const email = req.query.email;
-      const query = { email: email };
-      const result = await orderCollection.find(query).toArray();
-      res.send(result);
+
+      if (email) {
+        const userOrders = await orderCollection.find({ email }).toArray();
+        return res.json(userOrders);
+      } else {
+        const allOrders = await orderCollection.find().toArray();
+        return res.json(allOrders);
+      }
     });
+
     app.get("/order/:email", async (req, res) => {
       const email = req.params.email;
       const query = { email: email };
@@ -450,6 +560,69 @@ async function run() {
       const email = req.query.email;
       const query = { email: email };
       const result = await paymentCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    // stats
+    app.get("/admin-status", async (req, res) => {
+      const user = await userCollection.estimatedDocumentCount();
+      const productItems = await productCollection.estimatedDocumentCount();
+      const orderItems = await paymentCollection.estimatedDocumentCount();
+      const result = await paymentCollection
+        .aggregate([
+          {
+            $group: {
+              _id: null,
+              totalRevenue: {
+                $sum: "$fee",
+              },
+            },
+          },
+        ])
+        .toArray();
+      const revenue = result.length > 0 ? result[0].totalRevenue : 0;
+      res.send({
+        user,
+        productItems,
+        orderItems,
+        revenue,
+      });
+    });
+
+    app.get("/order-stats", async (req, res) => {
+      const result = await paymentCollection
+        .aggregate([
+          {
+            $unwind: "$productItemIds",
+          },
+          {
+            $lookup: {
+              from: "product",
+              localField: "productItemIds",
+              foreignField: "_id",
+              as: "productItemIds",
+            },
+          },
+          {
+            $unwind: "$productItemIds",
+          },
+          {
+            $group: {
+              _id: "$productItemIds.category",
+              quantity: { $sum: 1 },
+              revenue: { $sum: "$productItemIds.price" },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              category: "$_id",
+              quantity: "$quantity",
+              revenue: "$revenue",
+            },
+          },
+        ])
+        .toArray();
       res.send(result);
     });
 
