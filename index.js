@@ -386,10 +386,21 @@ async function run() {
         const orderData = req.body;
         const totalAmount = parseFloat(orderData.total[0]);
         const tran_Id = new ObjectId().toString();
-
+        const id = orderData.id;
+        console.log(id)
         // Check for SSL-Commerz payment method
         if (orderData.bank_name === "SSL-Commerz") {
           const primaryAddress = orderData.address[0]?.data || {};
+
+          const paymentData = {
+            email: orderData.email,
+            price: totalAmount,
+            transactionId: tran_Id,
+            orderID: id,
+            date: new Date(),
+            paymentMethod: "SSL-Commerz",
+            status: "success",
+          };
 
           const data = {
             total_amount: totalAmount.toFixed(2),
@@ -436,7 +447,9 @@ async function run() {
                   transactionId: tran_Id,
                 };
                 const result = orderCollection.insertOne(finalOrder);
-              } else {
+
+
+                } else {
                 res.status(500).send({ error: "Failed to get GatewayPageURL" });
               }
             })
@@ -451,15 +464,7 @@ async function run() {
               { $set: { isOrderConfirmed: true } }
             );
 
-            const paymentData = {
-              email: orderData.email,
-              price: totalAmount,
-              transactionId: req.params.tranId,
-              orderId: orderData._id,
-              date: new Date(),
-              paymentMethod: "SSL-Commerz",
-              status: "success",
-            };
+            console.log(paymentData);
             const payment = await paymentCollection.insertOne(paymentData);
             if (result.modifiedCount > 0) {
               res.redirect(`http://localhost:5173/dashboard/paymentHistory`);
@@ -564,23 +569,24 @@ async function run() {
     });
 
     // stats
-    app.get("/admin-status", async (req, res) => {
+    app.get("/admin-stats", async (req, res) => {
       const user = await userCollection.estimatedDocumentCount();
       const productItems = await productCollection.estimatedDocumentCount();
-      const orderItems = await paymentCollection.estimatedDocumentCount();
+      const orderItems = await orderCollection.estimatedDocumentCount();
       const result = await paymentCollection
         .aggregate([
           {
             $group: {
               _id: null,
               totalRevenue: {
-                $sum: "$fee",
+                $sum: "$price",
               },
             },
           },
         ])
         .toArray();
       const revenue = result.length > 0 ? result[0].totalRevenue : 0;
+
       res.send({
         user,
         productItems,
@@ -592,35 +598,7 @@ async function run() {
     app.get("/order-stats", async (req, res) => {
       const result = await paymentCollection
         .aggregate([
-          {
-            $unwind: "$productItemIds",
-          },
-          {
-            $lookup: {
-              from: "product",
-              localField: "productItemIds",
-              foreignField: "_id",
-              as: "productItemIds",
-            },
-          },
-          {
-            $unwind: "$productItemIds",
-          },
-          {
-            $group: {
-              _id: "$productItemIds.category",
-              quantity: { $sum: 1 },
-              revenue: { $sum: "$productItemIds.price" },
-            },
-          },
-          {
-            $project: {
-              _id: 0,
-              category: "$_id",
-              quantity: "$quantity",
-              revenue: "$revenue",
-            },
-          },
+          
         ])
         .toArray();
       res.send(result);
